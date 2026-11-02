@@ -1,319 +1,233 @@
-from __future__ import annotations
-
-import itertools
-import math
+import ast
 import time
-from typing import Iterable, List, Sequence, Tuple, Union
+import math
+from itertools import combinations
 
 BOARD_SIZE = 4
 EMPTY = 0
-VALID_VALUES = {0, 1, 2}
 
 
-def _normalize_board(board: Sequence[Sequence[int]]) -> List[List[int]]:
-    """Convert input into a 4x4 list-of-lists board."""
-    if isinstance(board, (list, tuple)) and len(board) == 4 and all(
-        isinstance(row, (list, tuple)) for row in board
-    ):
-        rows = [list(row) for row in board]
-        if all(len(r) == 4 for r in rows):
-            return rows
+def checkValid(board):
+    """
+    Returns True if the board is a valid game state or a completed game.
+    Invalid examples:
+      - counts of 1 and 2 differ by more than 1
+      - both players have a winning set
+      - board has impossible turn order
+    """
+    if len(board) != 4:
+        return False
+    for row in board:
+        if len(row) != 4:
+            return False
+        for cell in row:
+            if cell not in (0, 1, 2):
+                return False
 
-    if isinstance(board, (list, tuple)) and len(board) == 16:
-        flat = [int(v) for v in board]
-        return [flat[r * 4 : (r + 1) * 4] for r in range(4)]
+    p1 = sum(cell == 1 for row in board for cell in row)
+    p2 = sum(cell == 2 for row in board for cell in row)
 
-    raise ValueError("Board must be a 4x4 matrix or a flat 16-element list.")
-
-
-def _winner(board: Sequence[Sequence[int]], player: int) -> bool:
-    """Return True if player has a winning set of four cells."""
-    if player not in (1, 2):
-        raise ValueError("player must be 1 or 2")
-
-    cells = [
-        (r, c)
-        for r in range(BOARD_SIZE)
-        for c in range(BOARD_SIZE)
-        if board[r][c] == player
-    ]
-    if len(cells) < 4:
+    if abs(p1 - p2) > 1:
         return False
 
-    for combo in itertools.combinations(cells, 4):
-        rows = {r for r, _ in combo}
-        cols = {c for _, c in combo}
-        if len(rows) == 4 and len(cols) == 4:
-            return True
-    return False
+    p1_win = has_win(board, 1)
+    p2_win = has_win(board, 2)
 
-
-def _winning_sets(board: Sequence[Sequence[int]], player: int) -> int:
-    """Count the number of winning 4-cell sets for the given player."""
-    cells = [
-        (r, c)
-        for r in range(BOARD_SIZE)
-        for c in range(BOARD_SIZE)
-        if board[r][c] == player
-    ]
-    total = 0
-    for combo in itertools.combinations(cells, 4):
-        rows = {r for r, _ in combo}
-        cols = {c for _, c in combo}
-        if len(rows) == 4 and len(cols) == 4:
-            total += 1
-    return total
-
-
-def _legal_moves(board: Sequence[Sequence[int]]) -> List[Tuple[int, int]]:
-    """Return a sorted list of empty positions as (row, col), 1-based indexes."""
-    return [
-        (r, c)
-        for r in range(BOARD_SIZE)
-        for c in range(BOARD_SIZE)
-        if board[r][c] == EMPTY
-    ]
-
-
-def _apply_move(board: Sequence[Sequence[int]], move: Tuple[int, int], player: int) -> List[List[int]]:
-    """Return a board with move applied for the given player."""
-    row, col = move
-    b = [list(r) for r in board]
-    if not (0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE):
-        raise ValueError("Move is outside the board.")
-    if b[row][col] != EMPTY:
-        raise ValueError("Move is not legal on an empty square.")
-    b[row][col] = player
-    return b
-
-
-def _current_player(board: Sequence[Sequence[int]]) -> int:
-    """Determine whose turn it is based on the move counts."""
-    one_count = sum(cell == 1 for row in board for cell in row)
-    two_count = sum(cell == 2 for row in board for cell in row)
-
-    if one_count == two_count:
-        return 1
-    if one_count == two_count + 1:
-        return 2
-    raise ValueError("Board has an invalid move count sequence.")
-
-
-def _terminal_result(board: Sequence[Sequence[int]]) -> int:
-    """Return 1 if player 1 has won, -1 if player 2 has won, else 0."""
-    if _winner(board, 1):
-        return 1
-    if _winner(board, 2):
-        return -1
-    return 0
-
-
-def _utility_for_player(board: Sequence[Sequence[int]], root_player: int) -> int:
-    """Convert an end-state result into the value for the root player."""
-    result = _terminal_result(board)
-    if result == 0:
-        return 0
-    if root_player == 1:
-        return result
-    return -result
-
-
-def checkValid(board: Sequence[Sequence[int]]) -> bool:
-    """Return True if the board is a valid game state or completed game."""
-    try:
-        b = _normalize_board(board)
-    except ValueError:
-        return False
-
-    if any(cell not in VALID_VALUES for row in b for cell in row):
-        return False
-
-    one_count = sum(cell == 1 for row in b for cell in row)
-    two_count = sum(cell == 2 for row in b for cell in row)
-
-    if abs(one_count - two_count) > 1:
-        return False
-    if not (one_count == two_count or one_count == two_count + 1):
-        return False
-
-    p1_win = _winner(b, 1)
-    p2_win = _winner(b, 2)
     if p1_win and p2_win:
         return False
-    if p1_win and one_count <= two_count:
+
+    # If player 1 wins, player 1 must have exactly one more move than player 2
+    if p1_win and p1 <= p2:
         return False
-    if p2_win and one_count != two_count:
+
+    # If player 2 wins, player 2 must not have more pieces than player 1
+    if p2_win and p2 > p1:
         return False
 
     return True
 
 
-def Minimax(board: Sequence[Sequence[int]]) -> int:
-    """Return the game-theoretic value of a valid board: 1,0,-1."""
-    b = _normalize_board(board)
-    if not checkValid(b):
-        raise ValueError("Invalid board.")
+def has_win(board, player):
+    """True if player has a 4-cell capture with all distinct rows and cols."""
+    positions = []
+    for r in range(4):
+        for c in range(4):
+            if board[r][c] == player:
+                positions.append((r, c))
 
-    current = _current_player(b)
+    for combo in combinations(positions, 4):
+        rows = {r for r, c in combo}
+        cols = {c for r, c in combo}
+        if len(rows) == 4 and len(cols) == 4:
+            return True
+    return False
 
-    def solve(state: List[List[int]], turn: int) -> int:
-        result = _terminal_result(state)
-        if result != 0:
-            return result
-        if not _legal_moves(state):
+
+def count_wins(board, player):
+    """Number of distinct winning 4-cell sets for a player."""
+    positions = [(r, c) for r in range(4) for c in range(4) if board[r][c] == player]
+    total = 0
+    for combo in combinations(positions, 4):
+        rows = {r for r, c in combo}
+        cols = {c for r, c in combo}
+        if len(rows) == 4 and len(cols) == 4:
+            total += 1
+    return total
+
+
+def eval(board, p):
+    """
+    Static evaluation:
+      e(B, p) = number of ways player p can win - number of ways opponent can win
+    """
+    if not checkValid(board):
+        raise ValueError("Invalid board for eval()")
+    if p not in (1, 2):
+        raise ValueError("Player must be 1 or 2")
+
+    opp = 3 - p
+    return count_wins(board, p) - count_wins(board, opp)
+
+
+def legal_moves(board):
+    """Return all empty moves as (row, col) using zero-based indexing."""
+    moves = []
+    for r in range(4):
+        for c in range(4):
+            if board[r][c] == 0:
+                moves.append((r, c))
+    return moves
+
+
+def apply_move(board, move, player):
+    """Return a new board with the move applied."""
+    r, c = move
+    new_board = [row[:] for row in board]
+    if new_board[r][c] != 0:
+        raise ValueError("Illegal move")
+    new_board[r][c] = player
+    return new_board
+
+
+def current_player(board):
+    """Determine whose turn it should be based on the move counts."""
+    p1 = sum(cell == 1 for row in board for cell in row)
+    p2 = sum(cell == 2 for row in board for cell in row)
+
+    if p1 == p2:
+        return 1
+    if p1 == p2 + 1:
+        return 2
+    raise ValueError("Board has an impossible move count")
+
+
+def terminal_value(board):
+    """
+    Return 1 if player 1 has won, -1 if player 2 has won, 0 otherwise.
+    """
+    if has_win(board, 1):
+        return 1
+    if has_win(board, 2):
+        return -1
+    return 0
+
+
+def Minimax(board):
+    """
+    Return the value of the board:
+      1 if player 1 can force a win
+      0 if neither player can force a win
+     -1 if player 2 can force a win
+    """
+    if not checkValid(board):
+        raise ValueError("Invalid board")
+
+    def solve(state, turn):
+        outcome = terminal_value(state)
+        if outcome != 0:
+            return outcome
+
+        moves = legal_moves(state)
+        if not moves:
             return 0
 
         if turn == 1:
             best = -2
-            for move in _legal_moves(state):
-                child = _apply_move(state, move, 1)
-                best = max(best, solve(child, 2))
+            for move in moves:
+                child = apply_move(state, move, 1)
+                val = solve(child, 2)
+                if val > best:
+                    best = val
+            return best
+        else:
+            best = 2
+            for move in moves:
+                child = apply_move(state, move, 2)
+                val = solve(child, 1)
+                if val < best:
+                    best = val
             return best
 
-        best = 2
-        for move in _legal_moves(state):
-            child = _apply_move(state, move, 2)
-            best = min(best, solve(child, 1))
-        return best
-
-    return solve(b, current)
+    return solve(board, current_player(board))
 
 
-def eval(board: Sequence[Sequence[int]], p: int) -> int:
-    """Static evaluation for a board from the point of view of player p."""
-    b = _normalize_board(board)
-    if not checkValid(b):
-        raise ValueError("Invalid board.")
-    if p not in (1, 2):
-        raise ValueError("p must be 1 or 2")
-
-    opponent = 3 - p
-    return _winning_sets(b, p) - _winning_sets(b, opponent)
-
-
-def MinimaxCutOff(board: Sequence[Sequence[int]], k: int):
-    """Depth-limited minimax search. Returns (value, best_move, nodes, elapsed_seconds)."""
+def MinimaxCutOff(board, k):
+    """
+    Minimax search to depth k.
+    Returns: (value, best_move, nodes_expanded, elapsed_time)
+    best_move is chosen with smaller row, smaller col tie-break.
+    The returned value is for the root player.
+    """
     if k < 0:
         raise ValueError("k must be non-negative")
+    if not checkValid(board):
+        raise ValueError("Invalid board")
 
-    b = _normalize_board(board)
-    if not checkValid(b):
-        raise ValueError("Invalid board.")
-
-    root_player = _current_player(b)
+    root_player = current_player(board)
     start = time.perf_counter()
     nodes = 0
 
-    def search(state: List[List[int]], depth: int, turn: int) -> int:
+    def search(state, depth, turn):
         nonlocal nodes
         nodes += 1
 
-        result = _terminal_result(state)
-        if result != 0:
-            return _utility_for_player(state, root_player)
-        if depth == 0 or not _legal_moves(state):
+        outcome = terminal_value(state)
+        if outcome != 0:
+            if root_player == 1:
+                return outcome
+            return -outcome
+
+        if depth == 0 or not legal_moves(state):
             return eval(state, root_player)
 
-        moves = _legal_moves(state)
+        moves = legal_moves(state)
         if turn == root_player:
             best = -math.inf
             for move in moves:
-                child = _apply_move(state, move, turn)
-                value = search(child, depth - 1, 3 - turn)
-                best = max(best, value)
+                child = apply_move(state, move, turn)
+                val = search(child, depth - 1, 3 - turn)
+                if val > best:
+                    best = val
             return best
-
-        best = math.inf
-        for move in moves:
-            child = _apply_move(state, move, turn)
-            value = search(child, depth - 1, 3 - turn)
-            best = min(best, value)
-        return best
-
-    moves = _legal_moves(b)
-    if not moves:
-        return 0, None, nodes, time.perf_counter() - start
+        else:
+            best = math.inf
+            for move in moves:
+                child = apply_move(state, move, turn)
+                val = search(child, depth - 1, 3 - turn)
+                if val < best:
+                    best = val
+            return best
 
     best_move = None
     best_value = -math.inf
-    for move in sorted(moves):
-        child = _apply_move(b, move, root_player)
+
+    for move in sorted(legal_moves(board)):
+        child = apply_move(board, move, root_player)
         value = search(child, k - 1, 3 - root_player)
+
         if value > best_value:
             best_value = value
             best_move = move
-        elif value == best_value:
-            if move < best_move if best_move is not None else True:
-                best_move = move
-
-    result = (best_value, best_move, nodes, time.perf_counter() - start)
-    return result
-
-
-def MinimaxAlphaBetaCutOff(board: Sequence[Sequence[int]], k: int):
-    """Depth-limited alpha-beta minimax search. Returns (value, best_move, nodes, elapsed_seconds)."""
-    if k < 0:
-        raise ValueError("k must be non-negative")
-
-    b = _normalize_board(board)
-    if not checkValid(b):
-        raise ValueError("Invalid board.")
-
-    root_player = _current_player(b)
-    start = time.perf_counter()
-    nodes = 0
-
-    def search(state: List[List[int]], depth: int, turn: int, alpha: int, beta: int) -> int:
-        nonlocal nodes
-        nodes += 1
-
-        result = _terminal_result(state)
-        if result != 0:
-            return _utility_for_player(state, root_player)
-        if depth == 0 or not _legal_moves(state):
-            return eval(state, root_player)
-
-        moves = _legal_moves(state)
-        if turn == root_player:
-            best = -math.inf
-            for move in moves:
-                child = _apply_move(state, move, turn)
-                value = search(child, depth - 1, 3 - turn, alpha, beta)
-                if value > best:
-                    best = value
-                if best > alpha:
-                    alpha = best
-                if beta <= alpha:
-                    break
-            return best
-
-        best = math.inf
-        for move in moves:
-            child = _apply_move(state, move, turn)
-            value = search(child, depth - 1, 3 - turn, alpha, beta)
-            if value < best:
-                best = value
-            if best < beta:
-                beta = best
-            if beta <= alpha:
-                break
-        return best
-
-    moves = _legal_moves(b)
-    if not moves:
-        return 0, None, nodes, time.perf_counter() - start
-
-    best_move = None
-    best_value = -math.inf
-    alpha = -math.inf
-    beta = math.inf
-    for move in sorted(moves):
-        child = _apply_move(b, move, root_player)
-        value = search(child, k - 1, 3 - root_player, alpha, beta)
-        if value > best_value:
-            best_value = value
-            best_move = move
-            alpha = max(alpha, best_value)
         elif value == best_value and (best_move is None or move < best_move):
             best_move = move
 
@@ -321,209 +235,225 @@ def MinimaxAlphaBetaCutOff(board: Sequence[Sequence[int]], k: int):
     return best_value, best_move, nodes, elapsed
 
 
-def _display_board(board: Sequence[Sequence[int]]) -> None:
-    """Print the board in a human-friendly format."""
-    b = _normalize_board(board)
-    print()
-    for row in b:
+def MinimaxAlphaBetaCutOff(board, k):
+    """
+    Minimax with alpha-beta pruning to depth k.
+    Returns: (value, best_move, nodes_expanded, elapsed_time)
+    The returned value is for the root player.
+    """
+    if k < 0:
+        raise ValueError("k must be non-negative")
+    if not checkValid(board):
+        raise ValueError("Invalid board")
+
+    root_player = current_player(board)
+    start = time.perf_counter()
+    nodes = 0
+
+    def search(state, depth, turn, alpha, beta):
+        nonlocal nodes
+        nodes += 1
+
+        outcome = terminal_value(state)
+        if outcome != 0:
+            if root_player == 1:
+                return outcome
+            return -outcome
+
+        if depth == 0 or not legal_moves(state):
+            return eval(state, root_player)
+
+        moves = legal_moves(state)
+
+        if turn == root_player:
+            best = -math.inf
+            for move in moves:
+                child = apply_move(state, move, turn)
+                val = search(child, depth - 1, 3 - turn, alpha, beta)
+                if val > best:
+                    best = val
+                if best > alpha:
+                    alpha = best
+                if alpha >= beta:
+                    break
+            return best
+        else:
+            best = math.inf
+            for move in moves:
+                child = apply_move(state, move, turn)
+                val = search(child, depth - 1, 3 - turn, alpha, beta)
+                if val < best:
+                    best = val
+                if best < beta:
+                    beta = best
+                if alpha >= beta:
+                    break
+            return best
+
+    best_move = None
+    best_value = -math.inf
+    alpha = -math.inf
+    beta = math.inf
+
+    for move in sorted(legal_moves(board)):
+        child = apply_move(board, move, root_player)
+        value = search(child, k - 1, 3 - root_player, alpha, beta)
+
+        if value > best_value:
+            best_value = value
+            best_move = move
+            if best_value > alpha:
+                alpha = best_value
+        elif value == best_value and (best_move is None or move < best_move):
+            best_move = move
+
+    elapsed = time.perf_counter() - start
+    return best_value, best_move, nodes, elapsed
+
+
+def display_board(board):
+    for row in board:
         print(" ".join(str(cell) for cell in row))
     print()
 
 
-def _parse_board_input(prompt: str = "Enter the board as 4 rows of 4 numbers separated by spaces:") -> List[List[int]]:
-    """Read a board from the user. Accepts 4 lines or one line with 16 numbers."""
-    print(prompt)
-    lines = []
-    for _ in range(4):
-        raw = input().strip()
-        if not raw:
-            raise ValueError("Board input cannot be empty.")
-        parts = raw.split()
-        if len(parts) == 4:
-            values = [int(p) for p in parts]
-            lines.append(values)
-        elif len(parts) == 16:
-            flat = [int(p) for p in parts]
-            lines = [flat[r * 4 : (r + 1) * 4] for r in range(4)]
-            break
-        else:
-            raise ValueError("Each row must contain exactly 4 numbers.")
-    return lines
-
-
-def _prompt_move(board: Sequence[Sequence[int]], marker: int) -> Tuple[int, int]:
-    """Prompt the user for a move on a 1-based (row, col) system."""
+def prompt_move(board, player):
     while True:
         try:
-            text = input(f"Player {marker}: enter move as row col (1-4 each): ")
+            text = input(f"Player {player}: enter row col (1-4): ").strip()
             parts = text.split()
             if len(parts) != 2:
                 raise ValueError
-            row = int(parts[0]) - 1
-            col = int(parts[1]) - 1
-            if not (0 <= row < 4 and 0 <= col < 4):
-                raise ValueError
-            if board[row][col] != 0:
-                raise ValueError
-            return (row, col)
+            r = int(parts[0]) - 1
+            c = int(parts[1]) - 1
+            if 0 <= r < 4 and 0 <= c < 4 and board[r][c] == 0:
+                return (r, c)
+            raise ValueError
         except Exception:
-            print("Invalid move. Please enter two integers between 1 and 4 for row and column.")
+            print("Invalid move. Enter row and column numbers between 1 and 4 on an empty square.")
 
 
-def _play_human_vs_computer() -> None:
-    """Human vs computer mode."""
+def parse_board_input():
+    """
+    Accepts either:
+      - 4 rows of 4 numbers
+      - a Python-style nested list like:
+        [[1,0,0,0],[2,0,0,0],[0,2,1,0],[0,0,0,0]]
+    """
+    raw = input("Enter the board: ").strip()
+
+    if raw.startswith("["):
+        try:
+            board = ast.literal_eval(raw)
+            if isinstance(board, list) and len(board) == 4:
+                if all(isinstance(row, (list, tuple)) and len(row) == 4 for row in board):
+                    return [[int(x) for x in row] for row in board]
+        except Exception:
+            pass
+
+    rows = []
+    for _ in range(4):
+        row = input().strip()
+        if not row:
+            raise ValueError("Board input cannot be empty.")
+        parts = row.replace(",", " ").split()
+        if len(parts) != 4:
+            raise ValueError("Each row must contain exactly 4 numbers.")
+        rows.append([int(x) for x in parts])
+
+    return rows
+
+
+def play_human_vs_computer():
     board = [[0 for _ in range(4)] for _ in range(4)]
-    answer = input("Do you want to play first? (y/n): ").strip().lower()
-    human_first = answer in {"y", "yes", "1"}
-    human_marker = 1 if human_first else 2
-    computer_marker = 3 - human_marker
-    depth = int(input("Choose the cutoff depth for the computer: "))
+
+    ans = input("Do you want to play first? (y/n): ").strip().lower()
+    human_first = ans in ("y", "yes")
+
+    human_player = 1 if human_first else 2
+    computer_player = 3 - human_player
+
+    k = int(input("Choose cutoff depth for the computer: "))
 
     turn = 1
     while True:
-        _display_board(board)
-        if turn == human_marker:
-            row, col = _prompt_move(board, human_marker)
-            board[row][col] = human_marker
-        else:
-            print("Computer is thinking...")
-            value, move, nodes, elapsed = MinimaxAlphaBetaCutOff(board, depth)
-            if move is None:
-                break
-            row, col = move
-            board[row][col] = computer_marker
-            print(f"Computer chooses row {row + 1}, col {col + 1}.")
+        display_board(board)
 
-        if _winner(board, 1):
-            _display_board(board)
-            if human_marker == 1:
+        if turn == human_player:
+            r, c = prompt_move(board, human_player)
+            board[r][c] = human_player
+        else:
+            print("Computer thinking...")
+            value, move, nodes, elapsed = MinimaxAlphaBetaCutOff(board, k)
+            if move is None:
+                print("No legal moves remain.")
+                break
+            r, c = move
+            board[r][c] = computer_player
+            print(f"Computer plays at row {r+1}, col {c+1}")
+
+        if has_win(board, 1) or has_win(board, 2):
+            display_board(board)
+            if has_win(board, human_player):
                 print("You win!")
             else:
                 print("Computer wins!")
             break
-        if _winner(board, 2):
-            _display_board(board)
-            if human_marker == 2:
-                print("You win!")
-            else:
-                print("Computer wins!")
-            break
-        if not _legal_moves(board):
-            _display_board(board)
-            print("The board is full. It is a draw.")
+
+        if not legal_moves(board):
+            display_board(board)
+            print("Draw game.")
             break
 
         turn = 3 - turn
 
 
-def _play_user_vs_computer() -> None:
-    """Human chooses the board and marker, while the computer plays the other side."""
-    board = _parse_board_input()
-    if not checkValid(board):
-        raise ValueError("The entered board is invalid.")
-
-    choice = input("Choose your marker: 1 or 2: ").strip()
-    while choice not in {"1", "2"}:
-        choice = input("Invalid choice. Choose 1 or 2: ").strip()
-    human_marker = int(choice)
-    computer_marker = 3 - human_marker
-    depth = int(input("Choose the cutoff depth for the computer: "))
-
-    turn = _current_player(board)
-    while True:
-        _display_board(board)
-        if turn == human_marker:
-            row, col = _prompt_move(board, human_marker)
-            board[row][col] = human_marker
-        else:
-            print("Computer is thinking...")
-            value, move, nodes, elapsed = MinimaxAlphaBetaCutOff(board, depth)
-            if move is None:
-                print("No move available.")
-                break
-            row, col = move
-            board[row][col] = computer_marker
-            print(f"Computer chooses row {row + 1}, col {col + 1}.")
-
-        if _winner(board, 1):
-            _display_board(board)
-            if human_marker == 1:
-                print("You win!")
-            else:
-                print("Computer wins!")
-            break
-        if _winner(board, 2):
-            _display_board(board)
-            if human_marker == 2:
-                print("You win!")
-            else:
-                print("Computer wins!")
-            break
-        if not _legal_moves(board):
-            _display_board(board)
-            print("The board is full. It is a draw.")
-            break
-
-        turn = 3 - turn
-
-
-def main() -> None:
-    """Interactive menu-driven main program."""
+def main():
     while True:
         print("\nCS381 Project 3")
         print("0. Play against the computer")
         print("1. Evaluate a board using Minimax")
-        print("2. Evaluate a board using MinimaxAlphaBeta with cutoff")
+        print("2. Evaluate using MinimaxAlphaBetaCutOff")
         print("3. Compare MinimaxCutOff and MinimaxAlphaBetaCutOff")
-        print("4. Human vs computer game with chosen marker")
-        print("5. Exit")
+        print("4. Exit")
 
-        choice = input("Select an option: ").strip()
+        choice = input("Choose an option: ").strip()
+
         try:
             if choice == "0":
-                _play_human_vs_computer()
+                play_human_vs_computer()
+
             elif choice == "1":
-                board = _parse_board_input()
-                print(f"Minimax value: {Minimax(board)}")
+                board = parse_board_input()
+                print("Minimax value:", Minimax(board))
+
             elif choice == "2":
-                board = _parse_board_input()
-                depth = int(input("Enter cutoff depth k: "))
-                value, move, nodes, elapsed = MinimaxAlphaBetaCutOff(board, depth)
-                print(f"Value: {value}")
-                print(f"Best move: {move}")
-                print(f"Nodes expanded: {nodes}")
-                print(f"CPU time: {elapsed:.6f} seconds")
+                board = parse_board_input()
+                k = int(input("Enter cutoff depth k: "))
+                value, move, nodes, elapsed = MinimaxAlphaBetaCutOff(board, k)
+                print("Value:", value)
+                print("Best move:", move)
+                print("Nodes expanded:", nodes)
+                print("CPU time:", elapsed)
+
             elif choice == "3":
-                board = _parse_board_input()
-                depth = int(input("Enter cutoff depth k: "))
-                val1, move1, nodes1, elapsed1 = MinimaxCutOff(board, depth)
-                val2, move2, nodes2, elapsed2 = MinimaxAlphaBetaCutOff(board, depth)
-                print(f"MinimaxCutOff: value={val1}, best_move={move1}, nodes={nodes1}, time={elapsed1:.6f}s")
-                print(f"AlphaBetaCutOff: value={val2}, best_move={move2}, nodes={nodes2}, time={elapsed2:.6f}s")
+                board = parse_board_input()
+                k = int(input("Enter cutoff depth k: "))
+                value1, move1, nodes1, elapsed1 = MinimaxCutOff(board, k)
+                value2, move2, nodes2, elapsed2 = MinimaxAlphaBetaCutOff(board, k)
+                print("MinimaxCutOff:", value1, move1, nodes1, elapsed1)
+                print("MinimaxAlphaBetaCutOff:", value2, move2, nodes2, elapsed2)
+
             elif choice == "4":
-                _play_user_vs_computer()
-            elif choice == "5":
-                print("Goodbye!")
+                print("Exiting.")
                 break
+
             else:
-                print("Invalid option. Please enter a number from 0 to 5.")
-        except Exception as exc:
-            print(f"Error: {exc}")
+                print("Invalid option.")
+
+        except Exception as e:
+            print("Error:", e)
 
 
 if __name__ == "__main__":
     main()
-
-__all__ = [
-    "BOARD_SIZE",
-    "checkValid",
-    "Minimax",
-    "eval",
-    "MinimaxCutOff",
-    "MinimaxAlphaBetaCutOff",
-    "main",
-]
-
-
-# End of file
-""""""
