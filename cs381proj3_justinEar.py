@@ -138,16 +138,12 @@ def Minimax(board):
       1 if player 1 can force a win
       0 if neither player can force a win
      -1 if player 2 can force a win
+
+    This is the full minimax implementation for Option 1. It may take a long time for
+    sparse boards because the game tree is large; that is expected.
     """
     if not checkValid(board):
         raise ValueError("Invalid board")
-
-    empty_count = sum(cell == 0 for row in board for cell in row)
-    if empty_count > 10:
-        raise ValueError(
-            "Full Minimax on a sparse board is too slow for a 4x4 game. "
-            "Use a mostly-filled board or use one of the cutoff methods instead."
-        )
 
     def solve(state, turn):
         outcome = terminal_value(state)
@@ -369,16 +365,6 @@ def parse_board_input():
             pass
 
     rows = []
-    if len(flat_tokens) == 4 and all(len(token.replace(",", "").strip()) for token in flat_tokens):
-        # This is a special case if the user types all four rows on one line split by spaces
-        # and each row is still a 4-number set; this is not common, but we accept it.
-        try:
-            vals = [int(x) for x in flat_tokens]
-            if len(vals) == 4:
-                return [vals]
-        except ValueError:
-            pass
-
     for _ in range(4):
         row = input().strip()
         if not row:
