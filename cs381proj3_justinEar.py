@@ -142,6 +142,13 @@ def Minimax(board):
     if not checkValid(board):
         raise ValueError("Invalid board")
 
+    empty_count = sum(cell == 0 for row in board for cell in row)
+    if empty_count > 10:
+        raise ValueError(
+            "Full Minimax on a sparse board is too slow for a 4x4 game. "
+            "Use a mostly-filled board or use one of the cutoff methods instead."
+        )
+
     def solve(state, turn):
         outcome = terminal_value(state)
         if outcome != 0:
@@ -336,6 +343,7 @@ def prompt_move(board, player):
 def parse_board_input():
     """
     Accepts either:
+      - 16 numbers in a single line (e.g. 1 0 0 0 2 0 0 0 ...)
       - 4 rows of 4 numbers
       - a Python-style nested list like:
         [[1,0,0,0],[2,0,0,0],[0,2,1,0],[0,0,0,0]]
@@ -351,7 +359,26 @@ def parse_board_input():
         except Exception:
             pass
 
+    # Allow one-line 16-number input
+    flat_tokens = raw.replace(",", " ").split()
+    if len(flat_tokens) == 16:
+        try:
+            vals = [int(x) for x in flat_tokens]
+            return [vals[r * 4 : (r + 1) * 4] for r in range(4)]
+        except ValueError:
+            pass
+
     rows = []
+    if len(flat_tokens) == 4 and all(len(token.replace(",", "").strip()) for token in flat_tokens):
+        # This is a special case if the user types all four rows on one line split by spaces
+        # and each row is still a 4-number set; this is not common, but we accept it.
+        try:
+            vals = [int(x) for x in flat_tokens]
+            if len(vals) == 4:
+                return [vals]
+        except ValueError:
+            pass
+
     for _ in range(4):
         row = input().strip()
         if not row:
