@@ -437,11 +437,11 @@ def main():
         try:
             if choice == "0":
                 play_human_vs_computer()
-                
+
             elif choice == "1":
                 board = parse_board_input()
                 print("Minimax value:", Minimax(board))
-                
+
             elif choice == "2":
                 board = parse_board_input()
                 depth = int(input("Enter cutoff depth k: "))
@@ -450,18 +450,28 @@ def main():
                 print("Best move:", move)
                 print("Nodes expanded:", nodes)
                 print("CPU time:", elapsed)
-                
+
             elif choice == "3":
                 board = parse_board_input()
                 depth = int(input("Enter cutoff depth k: "))
                 value1, move1, nodes1, elapsed1 = MinimaxCutOff(board, depth)
                 value2, move2, nodes2, elapsed2 = MinimaxAlphaBetaCutOff(board, depth)
-                print("MinimaxCutOff:", value1, move1, nodes1, elapsed1)
-                print("MinimaxAlphaBetaCutOff:", value2, move2, nodes2, elapsed2)
-                
+
+                print("MinimaxCutOff:")
+                print("Value:", value1)
+                print("Best move:", move1)
+                print("Nodes expanded:", nodes1)
+                print("CPU time:", elapsed1)
+
+                print("MinimaxAlphaBetaCutOff:")
+                print("Value:", value2)
+                print("Best move:", move2)
+                print("Nodes expanded:", nodes2)
+                print("CPU time:", elapsed2)
+
             elif choice == "4":
                 play_from_entered_board()
-                
+
             elif choice == "5":
                 print("Exiting.")
                 break
