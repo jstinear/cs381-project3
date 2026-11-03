@@ -128,11 +128,17 @@ def terminal_value(board):
 
 
 def Minimax(board):
-    "Return 1 if player 1 can force a win, 0 for a draw, or -1 for player 2."
+    """Return (value, nodes_expanded, elapsed_seconds)."""
     if not checkValid(board):
         raise ValueError("Invalid board")
 
+    start = time.perf_counter()
+    nodes = 0
+
     def solve(state, turn):
+        nonlocal nodes
+        nodes += 1  # Count each visited state, including the root.
+
         outcome = terminal_value(state)
         if outcome != 0:
             return outcome
@@ -152,7 +158,9 @@ def Minimax(board):
             best = min(best, solve(apply_move(state, move, 2), 1))
         return best
 
-    return solve(board, current_player(board))
+    value = solve(board, current_player(board))
+    elapsed = time.perf_counter() - start
+    return value, nodes, elapsed
 
 
 def MinimaxCutOff(board, k):
@@ -440,7 +448,10 @@ def main():
 
             elif choice == "1":
                 board = parse_board_input()
-                print("Minimax value:", Minimax(board))
+                value, nodes, elapsed = Minimax(board)
+                print("Minimax value:", value)
+                print("Nodes expanded:", nodes)
+                print("CPU time:", elapsed)
 
             elif choice == "2":
                 board = parse_board_input()
