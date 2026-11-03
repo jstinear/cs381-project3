@@ -41,7 +41,7 @@ def checkValid(board):
         return False
 
     # If player 2 wins, the move counts must be equal.
-    if p2_win and p2 > p1:
+    if p2_win and p1 != p2:        
         return False
 
     return True
