@@ -1,9 +1,11 @@
+import ast
 import time
 import math
 from itertools import combinations
 
 BOARD_SIZE = 4
 EMPTY = 0
+
 
 def checkValid(board):
     """
@@ -136,6 +138,9 @@ def Minimax(board):
       1 if player 1 can force a win
       0 if neither player can force a win
      -1 if player 2 can force a win
+
+    This is the full minimax implementation for Option 1. It may take a long time for
+    sparse boards because the game tree is large; that is expected.
     """
     if not checkValid(board):
         raise ValueError("Invalid board")
@@ -331,6 +336,47 @@ def prompt_move(board, player):
             print("Invalid move. Enter row and column numbers between 1 and 4 on an empty square.")
 
 
+def parse_board_input():
+    """
+    Accepts either:
+      - 16 numbers in a single line (e.g. 1 0 0 0 2 0 0 0 ...)
+      - 4 rows of 4 numbers
+      - a Python-style nested list like:
+        [[1,0,0,0],[2,0,0,0],[0,2,1,0],[0,0,0,0]]
+    """
+    raw = input("Enter the board: ").strip()
+
+    if raw.startswith("["):
+        try:
+            board = ast.literal_eval(raw)
+            if isinstance(board, list) and len(board) == 4:
+                if all(isinstance(row, (list, tuple)) and len(row) == 4 for row in board):
+                    return [[int(x) for x in row] for row in board]
+        except Exception:
+            pass
+
+    # Allow one-line 16-number input
+    flat_tokens = raw.replace(",", " ").split()
+    if len(flat_tokens) == 16:
+        try:
+            vals = [int(x) for x in flat_tokens]
+            return [vals[r * 4 : (r + 1) * 4] for r in range(4)]
+        except ValueError:
+            pass
+
+    rows = []
+    for _ in range(4):
+        row = input().strip()
+        if not row:
+            raise ValueError("Board input cannot be empty.")
+        parts = row.replace(",", " ").split()
+        if len(parts) != 4:
+            raise ValueError("Each row must contain exactly 4 numbers.")
+        rows.append([int(x) for x in parts])
+
+    return rows
+
+
 def play_human_vs_computer():
     board = [[0 for _ in range(4)] for _ in range(4)]
 
@@ -391,19 +437,11 @@ def main():
                 play_human_vs_computer()
 
             elif choice == "1":
-                board = []
-                print("Enter 4 rows, each with 4 numbers:")
-                for _ in range(4):
-                    row = list(map(int, input().split()))
-                    board.append(row)
+                board = parse_board_input()
                 print("Minimax value:", Minimax(board))
 
             elif choice == "2":
-                board = []
-                print("Enter 4 rows, each with 4 numbers:")
-                for _ in range(4):
-                    row = list(map(int, input().split()))
-                    board.append(row)
+                board = parse_board_input()
                 k = int(input("Enter cutoff depth k: "))
                 value, move, nodes, elapsed = MinimaxAlphaBetaCutOff(board, k)
                 print("Value:", value)
@@ -412,11 +450,7 @@ def main():
                 print("CPU time:", elapsed)
 
             elif choice == "3":
-                board = []
-                print("Enter 4 rows, each with 4 numbers:")
-                for _ in range(4):
-                    row = list(map(int, input().split()))
-                    board.append(row)
+                board = parse_board_input()
                 k = int(input("Enter cutoff depth k: "))
                 value1, move1, nodes1, elapsed1 = MinimaxCutOff(board, k)
                 value2, move2, nodes2, elapsed2 = MinimaxAlphaBetaCutOff(board, k)
